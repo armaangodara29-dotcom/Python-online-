@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Python Runner</title>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Pyodide for running Python in the browser -->
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"></script>
+    
+    <!-- CodeMirror for the Code Editor interface -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+
+    <style>
+        /* Make the code editor fill its container */
+        .CodeMirror {
+            height: 100%;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 15px;
+            border-radius: 0.5rem;
+        }
+        
+        /* Custom scrollbar for a sleeker look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; 
+        }
+    </style>
+</head>
+<body class="bg-gray-950 text-white h-screen flex flex-col overflow-hidden font-sans">
+
+    <!-- Header / Navigation -->
+    <header class="bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center shadow-md z-10">
+        <div class="flex items-center gap-3">
+            <i class="fa-brands fa-python text-blue-400 text-3xl"></i>
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-yellow-400">
+                Python Web IDE
+            </h1>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <span id="status-badge" class="flex items-center gap-2 text-sm text-yellow-400 bg-yellow-400/10 px-3 py-1.5 rounded-full border border-yellow-400/20">
+                <i class="fa-solid fa-circle-notch fa-spin"></i> Loading Python Engine...
+            </span>
+            
+            <button id="run-btn" onclick="runCode()" disabled class="bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-6 rounded-lg transition duration-200 flex items-center gap-2 shadow-lg shadow-green-900/20">
+                <i class="fa-solid fa-play"></i> Run Code
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace (Editor + Terminal) -->
+    <main class="flex-1 flex flex-col md:flex-row p-4 gap-4 overflow-hidden">
+        
+        <!-- Code Editor Section -->
+        <section class="flex-1 flex flex-col min-h-0 bg-gray-900 rounded-xl border border-gray-800 shadow-xl overflow-hidden relative">
+            <div class="bg-gray-800 px-4 py-2 text-xs text-gray-400 font-mono border-b border-gray-700 flex justify-between">
+                <span>main.py</span>
+                <span>Python 3.11 (Pyodide)</span>
+            </div>
+            <div class="flex-1 overflow-hidden relative" id="editor-container">
+                <textarea id="code-editor"></textarea>
+            </div>
+        </section>
+
+        <!-- Terminal / Output Section -->
+        <section class="flex-1 flex flex-col min-h-0 bg-black rounded-xl border border-gray-800 shadow-xl overflow-hidden">
+            <div class="bg-gray-800 px-4 py-2 text-xs text-gray-400 font-mono border-b border-gray-700 flex justify-between items-center">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-terminal"></i> Console Output</span>
+                <button onclick="clearOutput()" class="hover:text-white transition" title="Clear Console">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+            <div class="flex-1 p-4 overflow-y-auto font-mono text-sm leading-relaxed" id="output-container">
+                <div class="text-gray-500 italic mb-2">System: Waiting for code execution...</div>
+                <pre id="output" class="whitespace-pre-wrap break-words"></pre>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Default Python code showcasing different types of functions
+        const defaultCode = `# Welcome to the Online Python IDE!
+# You can write, edit, and run Python code right here in your browser.
+
+def greet(name: str):
+    """A simple function returning a formatted string."""
+    return f"Hello, {name}! Welcome to the matrix."
+
+def calculate_factorial(n: int):
+    """A recursive mathematical function."""
+    if n == 0 or n == 1:
+        return 1
+    return n * calculate_factorial(n - 1)
+
+def filter_even_numbers(numbers: list):
+    """A list comprehension function."""
+    return [num for num in numbers if num % 2 == 0]
+
+# --- Let's test the functions! ---
+
+print("=== Greeting ===")
+print(greet("Developer"))
+print()
+
+print("=== Math Functions ===")
+for i in range(1, 6):
+    print(f"Factorial of {i} is {calculate_factorial(i)}")
+print()
+
+print("=== Data Manipulation ===")
+my_list = [12, 45, 2, 9, 88, 53, 10]
+evens = filter_even_numbers(my_list)
+print(f"Original list: {my_list}")
+print(f"Even numbers only: {evens}")
+`;
+
+        // Initialize CodeMirror Editor
+        const editor = CodeMirror.fromTextArea(document.getElementById("code-editor"), {
+            mode: "python",
+            theme: "dracula",
+            lineNumbers: true,
+            indentUnit: 4,
+            matchBrackets: true,
+            autoCloseBrackets: true,
+            lineWrapping: true
+        });
+        
+        // Set the default code
+        editor.setValue(defaultCode);
+
+        // Global Pyodide instance
+        let pyodideInstance = null;
+        const outputElement = document.getElementById("output");
+        const statusBadge = document.getElementById("status-badge");
+        const runBtn = document.getElementById("run-btn");
+
+        // Helper to append text to the console
+        function appendToConsole(text, isError = false) {
+            const span = document.createElement('span');
+            span.textContent = text + '\n';
+            if (isError) {
+                span.className = 'text-red-400';
+            } else {
+                span.className = 'text-green-400';
+            }
+            outputElement.appendChild(span);
+            
+            // Auto-scroll to bottom
+            const container = document.getElementById("output-container");
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Clear console output
+        function clearOutput() {
+            outputElement.innerHTML = '';
+        }
+
+        // Initialize the Pyodide environment
+        async function initPyodide() {
+            try {
+                // Load Pyodide and hijack stdout/stderr so print() statements go to our HTML console
+                pyodideInstance = await loadPyodide({
+                    stdout: (text) => appendToConsole(text, false),
+                    stderr: (text) => appendToConsole(text, true)
+                });
+                
+                // Update UI once loaded
+                statusBadge.innerHTML = '<i class="fa-solid fa-check-circle"></i> Python Ready';
+                statusBadge.className = 'flex items-center gap-2 text-sm text-green-400 bg-green-400/10 px-3 py-1.5 rounded-full border border-green-400/20';
+                runBtn.disabled = false;
+                
+            } catch (err) {
+                statusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Initialization Failed';
+                statusBadge.className = 'flex items-center gap-2 text-sm text-red-400 bg-red-400/10 px-3 py-1.5 rounded-full border border-red-400/20';
+                appendToConsole("Error loading Pyodide: " + err.message, true);
+            }
+        }
+
+        // Execute the code inside the editor
+        async function runCode() {
+            if (!pyodideInstance) return;
+            
+            const code = editor.getValue();
+            clearOutput();
+            
+            // Change button state to show execution
+            runBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Running...';
+            runBtn.disabled = true;
+
+            try {
+                // Run the python code asynchronously
+                await pyodideInstance.runPythonAsync(code);
+            } catch (err) {
+                // Catch Python syntax errors, tracebacks, etc.
+                appendToConsole(err.toString(), true);
+            } finally {
+                // Restore button state
+                runBtn.innerHTML = '<i class="fa-solid fa-play"></i> Run Code';
+                runBtn.disabled = false;
+            }
+        }
+
+        // Start initialization immediately
+        initPyodide();
+    </script>
+</body>
+</html>
